@@ -76,10 +76,11 @@ def build_sketch_on_workplane(context: Context, wp_empty):
     stamp_sketch_props(sketch_obj)
 
     # Resolve the plane and the part before activate, so align_view sees both.
-    # The picker hands over a name, so this is already an original: nothing to
-    # follow, which matters here of all places -- objects were created a moment
-    # ago, and that is when following an id's pointers takes Blender down.
-    wp_orig = wp_empty
+    # A pointer state stores the plane by name but hands it back *evaluated*
+    # (ObjectPointer.resolve), and an evaluated object is runtime data: parenting
+    # to it and pointing at it look right for the session and are simply gone
+    # when the file is reloaded, leaving the sketch with no plane to stand on.
+    wp_orig = getattr(wp_empty, "original", wp_empty)
     root = _part_for_workplane(context, wp_orig)
     from ..utilities.body import default_body_name, ensure_body
     from ..utilities.part import fix_transform, free_transform, join_part, part_root_of
@@ -124,7 +125,10 @@ def build_sketch_on_workplane(context: Context, wp_empty):
     fix_transform(sketch_obj)
     fix_transform(plane)
 
-    from ..utilities.body import name_after_body
+    from ..utilities.body import BODY_PLACED_KEY, name_after_body
+
+    # Built in its place, so the file update has nothing left to do for it.
+    body[BODY_PLACED_KEY] = True
 
     name_after_body(body, sketch_obj, plane if starts_a_part else None)
     hide_sketch_curves(sketch_obj)
