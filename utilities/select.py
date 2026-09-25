@@ -1,10 +1,10 @@
 import logging
 
 from bpy.props import EnumProperty
-from ..model.sketch_ref import get_active_sketch
 from bpy.types import Context
 
 from ..drawing import selection
+from ..model.sketch_ref import get_active_sketch
 from .curve_data import get_uuid, has_uuid_field
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ def select_all(context: Context):
 def deselect_all(context: Context):
     logger.debug("Deselecting all sketcher entities")
     selection.selected.clear()
+    selection.selected_constraints.clear()
 
 
 mode_property = EnumProperty(

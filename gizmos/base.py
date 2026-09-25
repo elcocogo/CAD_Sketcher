@@ -31,7 +31,14 @@ class ConstraintGizmo:
         return frame_cache.constraint_at(sketch, self.type, self.index)
 
     def get_constraint_color(self, constraint: GenericConstraint):
-        is_highlight = constraint == selection.highlight_constraint or self.is_highlight
+        is_selected = (
+            getattr(constraint, "constraint_uid", "") in selection.selected_constraints
+        )
+        is_highlight = (
+            is_selected
+            or constraint == selection.highlight_constraint
+            or self.is_highlight
+        )
         col = get_constraint_color_type(constraint)
         return frame_cache.constraint_color(col, is_highlight)
 

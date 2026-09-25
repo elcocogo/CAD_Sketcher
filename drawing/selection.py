@@ -11,6 +11,10 @@ this directly at draw time; the select/pick operators mutate it.
 # select operators expect).
 selected = []
 
+# constraint_uids of the currently selected constraints. Constraints have no
+# curve_id, so they get their own list, parallel to ``selected``.
+selected_constraints = []
+
 # The single curve_id under the cursor ("" = nothing hovered).
 hover = ""
 
@@ -81,6 +85,7 @@ def take_hover_lock():
 def clear():
     """Reset all interactive state (e.g. on file load)."""
     selected.clear()
+    selected_constraints.clear()
     highlight_curve_ids.clear()
     highlight_entities.clear()
     ignore_list.clear()

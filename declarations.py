@@ -89,6 +89,7 @@ class Operators(str, Enum):
     HoverCycle = "view3d.slvs_hover_cycle"
     Select = "view3d.slvs_select"
     SelectAll = "view3d.slvs_select_all"
+    SelectConstraint = "view3d.slvs_select_constraint"
     SelectBox = "view3d.slvs_select_box"
     SelectInvert = "view3d.slvs_select_invert"
     SelectExtendAll = "view3d.slvs_select_extend_all"

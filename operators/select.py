@@ -4,7 +4,7 @@ from bpy.utils import register_classes_factory
 
 from ..declarations import Operators
 from ..drawing import selection
-from ..model.sketch_ref import get_active_sketch
+from ..model.sketch_ref import get_active_constraints, get_active_sketch
 from ..utilities.highlighting import HighlightElement
 from ..utilities.select import deselect_all, mode_property, select_all
 from .utilities import select_extend, select_invert
@@ -59,6 +59,50 @@ class View3D_OT_slvs_select(Operator, HighlightElement):
             else:  # SET or EXTEND
                 if not is_selected:
                     selection.selected.append(index)
+
+        if context.area:
+            context.area.tag_redraw()
+        return {"FINISHED"}
+
+
+class View3D_OT_slvs_select_constraint(Operator):
+    """Select a constraint"""
+
+    bl_idname = Operators.SelectConstraint
+    bl_label = "Select Constraint"
+
+    type: StringProperty(name="Constraint Type", default="")
+    index: IntProperty(name="Index", default=-1)
+    mode: mode_property
+
+    def execute(self, context: Context):
+        constraints = get_active_constraints(context)
+        constraint = (
+            constraints.get_from_type_index(self.type, self.index)
+            if constraints
+            else None
+        )
+        uid = getattr(constraint, "constraint_uid", "")
+        hit = bool(uid)
+        mode = self.mode
+
+        if mode == "SET" or not hit:
+            deselect_all(context)
+
+        if hit:
+            is_selected = uid in selection.selected_constraints
+
+            if mode == "SUBTRACT":
+                if is_selected:
+                    selection.selected_constraints.remove(uid)
+            elif mode == "TOGGLE":
+                if is_selected:
+                    selection.selected_constraints.remove(uid)
+                else:
+                    selection.selected_constraints.append(uid)
+            else:  # SET or EXTEND
+                if not is_selected:
+                    selection.selected_constraints.append(uid)
 
         if context.area:
             context.area.tag_redraw()
@@ -144,6 +188,7 @@ class View3D_OT_slvs_hover_cycle(Operator):
 register, unregister = register_classes_factory(
     (
         View3D_OT_slvs_select,
+        View3D_OT_slvs_select_constraint,
         View3D_OT_slvs_select_all,
         View3D_OT_slvs_select_invert,
         View3D_OT_slvs_select_extend,

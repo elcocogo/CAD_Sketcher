@@ -4,7 +4,7 @@ from mathutils import Matrix, Vector
 
 from .. import global_data, units
 from ..declarations import GizmoGroups, Gizmos, Operators
-from ..drawing import constraint_icons, frame_cache
+from ..drawing import constraint_icons, frame_cache, selection
 from .base import ConstraintGizmo, forget_gizmos
 from .utilities import Color
 
@@ -219,7 +219,10 @@ class VIEW3D_GT_slvs_constraint_value(ConstraintGizmo, Gizmo):
         if not constr or not constr.visible or not hasattr(constr, "value_placement"):
             return
 
-        color = frame_cache.constraint_color(Color.Text, self.is_highlight)
+        is_selected = constr.constraint_uid in selection.selected_constraints
+        color = frame_cache.constraint_color(
+            Color.Text, self.is_highlight or is_selected
+        )
         text = _get_formatted_value(context, constr)
         text_size = frame_cache.text_size()
 

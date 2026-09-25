@@ -161,7 +161,7 @@ class View3D_OT_slvs_tweak_constraint_value_pos(Operator):
             context.area.tag_redraw()
 
     def execute(self, context: Context):
-        bpy.ops.view3d.slvs_context_menu(type=self.type, index=self.index)
+        bpy.ops.view3d.slvs_select_constraint(type=self.type, index=self.index)
         return {"FINISHED"}
 
 
