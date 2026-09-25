@@ -48,6 +48,13 @@ class View3D_OT_slvs_context_menu(Operator, HighlightElement):
             constraints = get_active_constraints(context)
             element = constraints.get_from_type_index(self.type, self.index)
             is_entity = False
+        elif selection.constraint_hover:
+            # Right-click on a dimension's value label: gizmos only capture the
+            # left click, so this is how the generic right-click keymap finds
+            # which constraint the cursor is over (see constraint_hover).
+            constraints = get_active_constraints(context)
+            element = constraints.get_from_type_index(*selection.constraint_hover)
+            is_entity = False
         else:
             # Entities — keyed by curve id
             hover = (

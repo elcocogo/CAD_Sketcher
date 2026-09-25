@@ -41,6 +41,12 @@ highlight_curve_ids = []
 # The constraint under the cursor, so its gizmo/icon draws highlighted.
 highlight_constraint = None
 
+# (type, index) of the dimension value gizmo under the cursor, updated on every
+# hover -- unlike ``highlight_constraint``, which only updates on tooltip/invoke.
+# Lets the right-click context-menu keymap (which gizmos don't otherwise receive)
+# find the constraint the cursor is over.
+constraint_hover = None
+
 # Legacy entity-based highlight list (old entity model); kept for compatibility.
 highlight_entities = []
 
@@ -90,8 +96,9 @@ def clear():
     highlight_entities.clear()
     ignore_list.clear()
     hover_candidates.clear()
-    global hover, highlight_constraint, hover_locked, hover_cycled
+    global hover, highlight_constraint, hover_locked, hover_cycled, constraint_hover
     hover = ""
     hover_locked = False
     hover_cycled = False
     highlight_constraint = None
+    constraint_hover = None

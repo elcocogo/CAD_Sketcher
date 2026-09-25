@@ -198,7 +198,7 @@ class VIEW3D_GT_slvs_constraint_value(ConstraintGizmo, Gizmo):
 
     bl_idname = Gizmos.ConstraintValue
 
-    __slots__ = ("type", "index", "width", "height")
+    __slots__ = ("type", "index", "width", "height", "margin")
 
     def test_select(self, context, location):
         # Don't intercept hover/picking while a stateful operator is running.
@@ -206,10 +206,23 @@ class VIEW3D_GT_slvs_constraint_value(ConstraintGizmo, Gizmo):
             return -1
         coords = Vector(location) - self.matrix_basis.translation.to_2d()
 
-        width, height = self.width, self.height
-        if -width / 2 < coords.x < width / 2 and -height / 2 < coords.y < height / 2:
-            return 0
-        return -1
+        # draw() positions the text's baseline at margin above matrix_basis, so
+        # the glyphs span [margin, margin + height] on this axis -- not
+        # [-height/2, height/2] around matrix_basis as the naive box would have it.
+        width, height, margin = self.width, self.height, self.margin
+        hit = -width / 2 < coords.x < width / 2 and margin < coords.y < margin + height
+
+        # Gizmos only capture the primary (left) click; right-click falls through
+        # to the generic context-menu keymap, which has no other way to know
+        # which constraint the cursor is over. Track it here, the same way the
+        # entity preselection gizmo tracks ``selection.hover``.
+        key = (self.type, self.index)
+        if hit:
+            selection.constraint_hover = key
+        elif selection.constraint_hover == key:
+            selection.constraint_hover = None
+
+        return 0 if hit else -1
 
     def draw(self, context):
         constr = self._get_constraint(context)
@@ -231,7 +244,7 @@ class VIEW3D_GT_slvs_constraint_value(ConstraintGizmo, Gizmo):
         blf.size(FONT_ID, text_size)
         self.width, self.height = blf.dimensions(FONT_ID, text)
 
-        margin = text_size / 4
+        margin = self.margin = text_size / 4
 
         sketch = frame_cache.active_sketch(context)
         basis = frame_cache.dimension_basis(sketch, constr) if sketch else None
@@ -248,3 +261,4 @@ class VIEW3D_GT_slvs_constraint_value(ConstraintGizmo, Gizmo):
     def setup(self):
         self.width = 0
         self.height = 0
+        self.margin = 0

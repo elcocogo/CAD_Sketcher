@@ -1,15 +1,23 @@
 import math
 
 from bpy.types import Gizmo, GizmoGroup
+from bpy_extras.view3d_utils import location_3d_to_region_2d
 from mathutils import Vector
 from mathutils.geometry import intersect_point_line
 
+from .. import global_data
 from ..declarations import GizmoGroups, Gizmos
-from ..drawing import frame_cache
+from ..drawing import frame_cache, selection
 from ..model.types import SlvsDistance
 from ..utilities.view import get_scale_from_pos
 from .base import ConstraintGenericGGT, ConstraintGizmoGeneric
-from .utilities import draw_arrow_shape, get_arrow_size, get_overshoot
+from .utilities import (
+    SELECT_TOLERANCE_PX,
+    closest_distance_to_polyline,
+    draw_arrow_shape,
+    get_arrow_size,
+    get_overshoot,
+)
 
 
 class VIEW3D_GGT_slvs_distance(GizmoGroup, ConstraintGenericGGT):
@@ -24,6 +32,10 @@ class VIEW3D_GT_slvs_distance(Gizmo, ConstraintGizmoGeneric):
     bl_idname = Gizmos.Distance
     type = SlvsDistance.type
 
+    # No draw_select: Blender only calls test_select when draw_select is
+    # absent from the class entirely (see wm_gizmo_map.cc), and the analytic
+    # test_select below is what right-click needs to find this constraint.
+
     bl_target_properties = (
         {
             "id": "offset",
@@ -37,6 +49,44 @@ class VIEW3D_GT_slvs_distance(Gizmo, ConstraintGizmoGeneric):
         "index",
         "_shape_sig",
     )
+
+    def test_select(self, context, location):
+        """Analytic hit-test against the dimension's main line (not the
+        decorative arrowheads/helplines), so right-click's generic keymap can
+        find which constraint the cursor is over -- Blender's default GPU
+        picking (draw_select) can't be observed from Python. Overriding this
+        replaces that GPU picking for this gizmo entirely, left-click included.
+        """
+        if global_data.stateful_op_running:
+            return -1
+        constr = self._get_constraint(context)
+        if not constr or not constr.visible:
+            return -1
+
+        ui_scale = context.preferences.system.ui_scale
+        half_dist = constr.value / 2 / ui_scale
+        offset = self.target_get_value("offset")
+        p1 = self.matrix_world @ Vector((-half_dist, offset, 0.0))
+        p2 = self.matrix_world @ Vector((half_dist, offset, 0.0))
+
+        region, rv3d = context.region, context.region_data
+        p1_2d = location_3d_to_region_2d(region, rv3d, p1)
+        p2_2d = location_3d_to_region_2d(region, rv3d, p2)
+        if p1_2d is None or p2_2d is None:
+            return -1
+
+        cursor = Vector(location)
+        dist = closest_distance_to_polyline(cursor, (p1_2d, p2_2d))
+        hit = dist < SELECT_TOLERANCE_PX
+
+        # Same tracking as the value gizmo's test_select, for the same reason.
+        key = (self.type, self.index)
+        if hit:
+            selection.constraint_hover = key
+        elif selection.constraint_hover == key:
+            selection.constraint_hover = None
+
+        return 0 if hit else -1
 
     def _get_helplines(self, context, constr, scale_1, scale_2):
         ui_scale = context.preferences.system.ui_scale

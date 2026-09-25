@@ -1,4 +1,3 @@
-from .. import global_data
 from ..declarations import Operators
 from ..drawing import frame_cache, selection
 from ..model.types import GenericConstraint
@@ -118,22 +117,6 @@ class ConstraintGizmoGeneric(ConstraintGizmo):
             self._create_shape(context, constr)
             self._shape_sig = sig
         self.draw_custom_shape(self.custom_shape)
-
-    def draw_select(self, context, select_id):
-        # While a stateful operator runs, stay out of the gizmo select buffer so
-        # the dimension label (which follows the cursor) neither highlights nor
-        # swallows a click meant for the geometry underneath -- gating the select
-        # pass directly avoids the one-frame lag/flicker of toggling hide_select.
-        if global_data.stateful_op_running:
-            return
-        constr = self._get_constraint(context)
-        if not constr or not constr.visible:
-            return
-        # The select shape (no helplines) overwrites custom_shape, so invalidate
-        # the display cache to force draw() to rebuild the real shape next time.
-        self._create_shape(context, constr, select=True)
-        self._shape_sig = None
-        self.draw_custom_shape(self.custom_shape, select_id=select_id)
 
 
 # gizmo group pointer -> signature of the constraints its gizmos were made for.
