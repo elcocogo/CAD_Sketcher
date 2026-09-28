@@ -1,11 +1,26 @@
 import math
 from enum import Enum, auto
 
-from mathutils import Matrix
+from mathutils import Matrix, Vector
+from mathutils.geometry import intersect_point_line
 
 from ..model.types import GenericConstraint
 from ..utilities.constants import QUARTER_TURN
 from ..utilities.preferences import get_prefs
+
+# Pixel tolerance for analytic click/hover tests against a gizmo's on-screen
+# shape (see e.g. VIEW3D_GT_slvs_distance.test_select).
+SELECT_TOLERANCE_PX = 8
+
+
+def closest_distance_to_polyline(cursor: Vector, points) -> float:
+    """Shortest 2D distance from ``cursor`` to the polyline through ``points``."""
+    best = math.inf
+    for a, b in zip(points, points[1:]):
+        _, factor = intersect_point_line(cursor, a, b)
+        closest = a.lerp(b, max(0.0, min(1.0, factor)))
+        best = min(best, (cursor - closest).length)
+    return best
 
 
 class Color(Enum):
@@ -57,12 +72,12 @@ def draw_arrow_shape(target, shoulder, width, is_3d=False):
     v.length = abs(width / 2)
 
     return (
-        ((shoulder + v)),
+        (shoulder + v),
         target,
         target,
-        ((shoulder - v)),
-        ((shoulder - v)),
-        ((shoulder + v)),
+        (shoulder - v),
+        (shoulder - v),
+        (shoulder + v),
     )
 
 

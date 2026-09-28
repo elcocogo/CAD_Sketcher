@@ -1,16 +1,25 @@
 import math
 
 from bpy.types import Gizmo, GizmoGroup
-from mathutils import Matrix
+from bpy_extras.view3d_utils import location_3d_to_region_2d
+from mathutils import Matrix, Vector
 
+from .. import global_data
 from ..declarations import GizmoGroups, Gizmos
+from ..drawing import selection
 from ..model.types import SlvsAngle
 from ..utilities.constants import QUARTER_TURN
 from ..utilities.draw import coords_arc_2d
 from ..utilities.math import pol2cart
 from ..utilities.view import get_scale_from_pos
 from .base import ConstraintGenericGGT, ConstraintGizmoGeneric
-from .utilities import draw_arrow_shape, get_arrow_size, get_overshoot
+from .utilities import (
+    SELECT_TOLERANCE_PX,
+    closest_distance_to_polyline,
+    draw_arrow_shape,
+    get_arrow_size,
+    get_overshoot,
+)
 
 
 class VIEW3D_GGT_slvs_angle(GizmoGroup, ConstraintGenericGGT):
@@ -25,17 +34,70 @@ class VIEW3D_GT_slvs_angle(Gizmo, ConstraintGizmoGeneric):
     bl_idname = Gizmos.Angle
     type = SlvsAngle.type
 
-    bl_target_properties = ({
-        "id": "offset",
-        "type": "FLOAT",
-        "array_length": 1,
-    },)
+    # No draw_select -- see VIEW3D_GT_slvs_distance for why (analytic
+    # test_select needed instead, for right-click support).
+
+    bl_target_properties = (
+        {
+            "id": "offset",
+            "type": "FLOAT",
+            "array_length": 1,
+        },
+    )
 
     __slots__ = (
         "custom_shape",
         "index",
         "_shape_sig",
     )
+
+    def _arc_range(self, constr):
+        """(angle, offset) for coords_arc_2d, matching the arc drawn in
+        _create_shape -- shared by the drawn shape and the hit-test below."""
+        angle = abs(constr.value)
+        half_angle = angle / 2
+        if constr.text_inside():
+            return angle, -half_angle
+        leader_end = constr.draw_outset
+        leader_start = math.copysign(half_angle, -leader_end)
+        return leader_end - leader_start, leader_start
+
+    def test_select(self, context, location):
+        """Analytic hit-test against the dimension's arc (not the decorative
+        arrowheads/helplines) -- see VIEW3D_GT_slvs_distance.test_select for
+        why this replaces Blender's default GPU-based picking entirely.
+        """
+        if global_data.stateful_op_running:
+            return -1
+        constr = self._get_constraint(context)
+        if not constr or not constr.visible:
+            return -1
+
+        radius = self.target_get_value("offset")
+        arc_angle, arc_offset = self._arc_range(constr)
+
+        region, rv3d = context.region, context.region_data
+        points_2d = []
+        for x, y in coords_arc_2d(0, 0, radius, 16, angle=arc_angle, offset=arc_offset):
+            p = location_3d_to_region_2d(
+                region, rv3d, self.matrix_world @ Vector((x, y, 0.0))
+            )
+            if p is not None:
+                points_2d.append(p)
+        if len(points_2d) < 2:
+            return -1
+
+        cursor = Vector(location)
+        hit = closest_distance_to_polyline(cursor, points_2d) < SELECT_TOLERANCE_PX
+
+        # Same tracking as the value gizmo's test_select, for the same reason.
+        key = (self.type, self.index)
+        if hit:
+            selection.constraint_hover = key
+        elif selection.constraint_hover == key:
+            selection.constraint_hover = None
+
+        return 0 if hit else -1
 
     def _get_helplines(self, context, constr, scale_1, scale_2):
         angle = abs(constr.value)
@@ -111,11 +173,7 @@ class VIEW3D_GT_slvs_angle(Gizmo, ConstraintGizmoGeneric):
                     type="LINES",
                 ),
                 *draw_arrow_shape(p2, p2 + p2_s, widths[1]),
-                *(
-                    self._get_helplines(context, constr, *scales)
-                    if not select
-                    else ()
-                ),
+                *(self._get_helplines(context, constr, *scales) if not select else ()),
             )
         else:
             leader_end = (
@@ -135,11 +193,7 @@ class VIEW3D_GT_slvs_angle(Gizmo, ConstraintGizmoGeneric):
                     type="LINES",
                 ),
                 *draw_arrow_shape(p2, p2 - p2_s, widths[1]),
-                *(
-                    self._get_helplines(context, constr, *scales)
-                    if not select
-                    else ()
-                ),
+                *(self._get_helplines(context, constr, *scales) if not select else ()),
             )
 
         self.custom_shape = self.new_custom_shape("LINES", coords)

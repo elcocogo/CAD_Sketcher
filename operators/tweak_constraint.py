@@ -5,7 +5,9 @@ from bpy.utils import register_classes_factory
 from mathutils import Vector
 from mathutils.geometry import intersect_line_plane
 
+from .. import units
 from ..declarations import Operators
+from ..drawing import selection
 from ..model.sketch_ref import get_active_constraints, get_active_sketch
 from ..stateful_operator.utilities.keymap import is_numeric_input, is_unit_input
 from ..stateful_operator.utilities.numeric import NumericInput, parse_numeric
@@ -15,6 +17,7 @@ from ..stateful_operator.utilities.switch import (
     SWITCH,
     key_action,
 )
+from ..utilities.select import deselect_all
 from ..utilities.view import get_picking_origin_end
 
 # Confirm / cancel the placement modal.
@@ -161,10 +164,92 @@ class View3D_OT_slvs_tweak_constraint_value_pos(Operator):
             context.area.tag_redraw()
 
     def execute(self, context: Context):
-        bpy.ops.view3d.slvs_context_menu(type=self.type, index=self.index)
+        # Highlight this constraint (replacing any other selection), then open
+        # the value dialog -- it stays highlighted after the dialog closes too.
+        deselect_all(context)
+        constr = self._constraint(context)
+        uid = getattr(constr, "constraint_uid", "")
+        if uid:
+            selection.selected_constraint = uid
+        bpy.ops.view3d.slvs_edit_constraint_value(
+            "INVOKE_DEFAULT", type=self.type, index=self.index
+        )
+        return {"FINISHED"}
+
+
+class View3D_OT_slvs_edit_constraint_value(Operator):
+    """Edit a dimension's value directly, in a small dialog"""
+
+    bl_idname = Operators.EditConstraintValue
+    bl_label = "Edit Value"
+    bl_options = {"UNDO"}
+
+    type: StringProperty(options={"SKIP_SAVE"})
+    index: IntProperty(default=-1, options={"SKIP_SAVE"})
+    # Text, not a FloatProperty: constraints need different units (length vs
+    # rotation) depending on type, which a single shared property can't do:
+    # units on a bpy.props.FloatProperty are fixed at class-definition time.
+    # parse_numeric (below) already handles unit-aware text for either.
+    value: StringProperty(name="Value", options={"SKIP_SAVE"})
+
+    def _constraint(self, context: Context):
+        constraints = get_active_constraints(context)
+        if not constraints:
+            return None
+        return constraints.get_from_type_index(self.type, self.index)
+
+    def invoke(self, context: Context, event: Event):
+        constr = self._constraint(context)
+        if constr is None or not hasattr(constr, "value"):
+            return {"CANCELLED"}
+
+        prop = constr.rna_type.properties.get("value")
+        if prop and prop.unit == "LENGTH":
+            self.value = units.format_distance(constr.value)
+        elif prop and prop.unit == "ROTATION":
+            self.value = units.format_angle(constr.value)
+        else:
+            self.value = str(constr.value)
+
+        return context.window_manager.invoke_props_dialog(self, width=160)
+
+    def draw(self, context: Context):
+        # activate_init only takes effect through invoke_props_dialog's popup
+        # path -- unlike wm.popup_menu(), it actually runs the activation step
+        # (see ContextMenu, which can't offer this for the same reason).
+        layout = self.layout
+        layout.activate_init = True
+        layout.prop(self, "value", text="Value")
+
+    def execute(self, context: Context):
+        constr = self._constraint(context)
+        if constr is None:
+            return {"CANCELLED"}
+
+        prop = constr.rna_type.properties.get("value")
+        if prop is None:
+            return {"CANCELLED"}
+        value = parse_numeric(prop, self.value, context.scene.unit_settings.system)
+        if value is None:
+            return {"CANCELLED"}
+
+        constr.value = value
+
+        sketch = get_active_sketch(context)
+        if sketch:
+            from ..curve_solver import solve_system
+            from ..utilities.curve_data import refresh_curve_geometry
+
+            if solve_system(context, sketch=sketch):
+                refresh_curve_geometry(sketch)
+        if context.area:
+            context.area.tag_redraw()
         return {"FINISHED"}
 
 
 register, unregister = register_classes_factory(
-    (View3D_OT_slvs_tweak_constraint_value_pos,)
+    (
+        View3D_OT_slvs_tweak_constraint_value_pos,
+        View3D_OT_slvs_edit_constraint_value,
+    )
 )
